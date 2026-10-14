@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Word Hunt</title>
+<style>
+:root {
+  --bg: #eef0f4;
+  --panel: #ffffff;
+  --fg: #1d2330;
+  --muted: #6b7385;
+  --line: #d3d7e0;
+  --correct: #2f9e5b;
+  --present: #d49a12;
+  --absent: #7d8596;
+  --accent: #3a4fd6;
+  --accent-fg: #ffffff;
+  --danger: #c2443a;
+  --shadow: 0 10px 30px rgba(20, 28, 50, 0.12);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12151c;
+    --panel: #1b202b;
+    --fg: #eceff6;
+    --muted: #9aa3b5;
+    --line: #2c3342;
+    --correct: #38b26a;
+    --present: #e0ae2b;
+    --absent: #4a5163;
+    --accent: #7b8cff;
+    --accent-fg: #10131c;
+    --danger: #e0675c;
+    --shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  display: flex;
+  justify-content: center;
+  padding: 24px 16px 48px;
+}
+
+.app {
+  width: 100%;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+header { display: flex; flex-direction: column; gap: 4px; }
+h1 {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 2rem;
+  letter-spacing: 0.02em;
+}
+.sub { margin: 0; color: var(--muted); font-size: 0.95rem; }
+
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+.stats strong { color: var(--fg); font-variant-numeric: tabular-nums; }
+
+.pattern {
+  font-family: "Consolas", "Courier New", monospace;
+  font-size: 1.3rem;
+  letter-spacing: 0.2em;
+  color: var(--correct);
+  font-weight: 700;
+}
+
+.board {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 46vh;
+  overflow-y: auto;
+  padding: 4px;
+}
+.row { display: flex; gap: 6px; justify-content: center; }
+.tile {
+  flex: 1 1 0;
+  max-width: 52px;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border: 2px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  font-size: clamp(1rem, 4.5vw, 1.6rem);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.tile.filled { border-color: var(--muted); }
+.tile.correct, .tile.present, .tile.absent { color: #fff; border-color: transparent; }
+.tile.correct { background: var(--correct); }
+.tile.present { background: var(--present); }
+.tile.absent { background: var(--absent); }
+.tile.pop { animation: pop 0.35s ease; }
+@keyframes pop { 0% { transform: scale(0.8); } 60% { transform: scale(1.08); } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .tile.pop { animation: none; } }
+
+.msg { min-height: 1.4em; text-align: center; font-weight: 600; }
+.msg.error { color: var(--danger); }
+.msg.win { color: var(--correct); font-size: 1.15rem; }
+
+.clue {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 5px solid var(--present);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font-size: 0.95rem;
+}
+.clue b { display: block; font-size: 0.75rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-bottom: 2px; }
+
+.form { display: flex; gap: 8px; }
+input[type="text"] {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 14px;
+  font-size: 1.1rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  border: 2px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--fg);
+}
+input[type="text"]:focus { outline: 3px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+
+button {
+  font: inherit;
+  font-weight: 600;
+  padding: 12px 18px;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.primary { background: var(--accent); color: var(--accent-fg); }
+.ghost { background: transparent; border-color: var(--line); color: var(--fg); }
+.danger { background: transparent; border-color: var(--danger); color: var(--danger); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.keyboard { display: flex; flex-wrap: wrap; gap: 5px; justify-content: center; }
+.key {
+  min-width: 30px;
+  padding: 8px 0;
+  flex: 0 0 calc((100% - 5px * 12) / 13);
+  text-align: center;
+  border-radius: 5px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.key.correct { background: var(--correct); color: #fff; border-color: transparent; }
+.key.present { background: var(--present); color: #fff; border-color: transparent; }
+.key.absent { background: var(--absent); color: #fff; border-color: transparent; opacity: 0.7; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.82rem; color: var(--muted); }
+.legend span::before {
+  content: "";
+  display: inline-block;
+  width: 12px; height: 12px;
+  border-radius: 3px;
+  margin-right: 6px;
+  vertical-align: -1px;
+}
+.legend .l-c::before { background: var(--correct); }
+.legend .l-p::before { background: var(--present); }
+.legend .l-a::before { background: var(--absent); }
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 14, 24, 0.6);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+.overlay[hidden] { display: none; }
+.modal {
+  background: var(--panel);
+  color: var(--fg);
+  border-radius: 14px;
+  padding: 24px;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.modal h2 { margin: 0; font-family: Georgia, serif; }
+.modal p { margin: 0; line-height: 1.5; }
+.answer-word {
+  font-family: "Consolas", monospace;
+  font-size: 1.8rem;
+  letter-spacing: 0.25em;
+  text-align: center;
+  font-weight: 800;
+  color: var(--accent);
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Word Hunt</h1>
+    <p class="sub">I'm thinking of a secret word. Guess it!</p>
+  </header>
+
+  <div class="stats">
+    <span>Secret word length: <strong id="len">-</strong> letters</span>
+    <span>Attempts: <strong id="count">0</strong></span>
+    <span>Words asked: <strong id="seen">-</strong></span>
+    <span class="pattern" id="pattern" aria-label="Correct letters so far"></span>
+  </div>
+
+  <div class="legend">
+    <span class="l-c">Right letter, right place</span>
+    <span class="l-p">In the word, wrong place</span>
+    <span class="l-a">Not in the word</span>
+  </div>
+
+  <div class="board" id="board" aria-live="polite"></div>
+
+  <div class="msg" id="msg"></div>
+
+  <div class="clue" id="clue" hidden><b>Clue</b><span id="clueText"></span></div>
+
+  <div class="form" id="form">
+    <input type="text" id="guess" aria-label="Type your guess" placeholder="Type any word (1 to 10 letters)" maxlength="10" autocomplete="off" autofocus>
+    <button class="primary" type="button" id="submitBtn">Check</button>
+  </div>
+
+  <div class="actions">
+    <button class="danger" type="button" id="revealBtn" hidden>Reveal Answer</button>
+    <button class="ghost" type="button" id="newBtn">New Word</button>
+  </div>
+
+  <div class="keyboard" id="keyboard" aria-hidden="true"></div>
+</div>
+
+<div class="overlay" id="overlay" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+    <h2 id="mTitle"></h2>
+    <p id="mBody"></p>
+    <div class="answer-word" id="mAnswer" hidden></div>
+    <div class="actions" id="mActions"></div>
+  </div>
+</div>
+
+<script>
+// ---------- Word list (5 to 10 letters) with clues ----------
+const WORDS = [
+  { w: "MANGO", c: "A sweet tropical fruit, the king of fruits in summer." },
+  { w: "TIGER", c: "A big striped cat that lives in the jungle." },
+  { w: "KOLAM", c: "A decorative pattern drawn at the doorstep with rice flour." },
+  { w: "PONGAL", c: "A harvest festival and a sweet rice dish." },
+  { w: "SAMBAR", c: "A lentil and vegetable stew served with idli and dosa." },
+  { w: "PLANET", c: "Earth, Mars and Jupiter are all examples." },
+  { w: "GUITAR", c: "A musical instrument with six strings." },
+  { w: "JUNGLE", c: "A dense forest where wild animals live." },
+  { w: "BANANA", c: "A long yellow fruit." },
+  { w: "COFFEE", c: "A hot morning drink made from roasted beans." },
+  { w: "SCHOOL", c: "The place you went to every day as a child." },
+  { w: "PYTHON", c: "A popular programming language, and also a snake." },
+  { w: "MONSOON", c: "The rainy season." },
+  { w: "PENGUIN", c: "A bird that cannot fly and lives in cold places." },
+  { w: "LIBRARY", c: "A quiet place full of books." },
+  { w: "KITCHEN", c: "The room in a house where food is cooked." },
+  { w: "CRICKET", c: "A sport played with a bat, a ball and wickets." },
+  { w: "NETWORK", c: "A group of connected computers." },
+  { w: "RAINBOW", c: "Seven colours in the sky after rain." },
+  { w: "VILLAGE", c: "A small, quiet community in the countryside." },
+  { w: "BIRIYANI", c: "A spiced rice dish with meat or vegetables." },
+  { w: "BIRTHDAY", c: "A yearly celebration with a cake." },
+  { w: "COMPUTER", c: "A machine you use to write code." },
+  { w: "ELEPHANT", c: "The largest land animal, with a trunk." },
+  { w: "MOUNTAIN", c: "A very tall natural hill." },
+  { w: "SANDWICH", c: "A filling placed between two slices of bread." },
+  { w: "SECURITY", c: "Protection against threats and attacks." },
+  { w: "DATABASE", c: "An organised collection of stored data, queried with SQL." },
+  { w: "KEYBOARD", c: "The device you type on." },
+  { w: "FESTIVAL", c: "A special celebration such as Diwali or Pongal." },
+  { w: "BUTTERFLY", c: "An insect with colourful wings that starts life as a caterpillar." },
+  { w: "CHOCOLATE", c: "A sweet treat made from cocoa." },
+  { w: "ALGORITHM", c: "A step-by-step method for solving a problem." },
+  { w: "UNIVERSITY", c: "Where you study for a degree after school." },
+  { w: "PROGRAMMER", c: "A person who writes code." },
+  { w: "JAVASCRIPT", c: "The language that makes web pages interactive." },
+  { w: "JALLIKATTU", c: "A traditional bull-taming sport held during Pongal in Tamil Nadu." },
+  { w: "ORANGE", c: "A round citrus fruit with a thick peel, rich in vitamin C." },
+  { w: "PINEAPPLE", c: "A tropical fruit with a spiky crown and sweet yellow flesh." },
+  { w: "COCONUT", c: "A tropical fruit whose water and milk are used in South Indian cooking." },
+  { w: "TOMATO", c: "A red fruit used like a vegetable in curries and chutneys." },
+  { w: "POTATO", c: "A starchy underground vegetable used to make fries and chips." },
+  { w: "ONION", c: "A vegetable that makes you cry when you cut it." },
+  { w: "GARLIC", c: "A pungent bulb used to flavour curries; it grows in small cloves." },
+  { w: "PEPPER", c: "A hot spice, often black, that can make you sneeze." },
+  { w: "CINNAMON", c: "A sweet-smelling spice made from tree bark." },
+  { w: "TURMERIC", c: "A yellow spice that gives curry its colour." },
+  { w: "DOSAI", c: "A thin crispy South Indian crepe made from fermented batter." },
+  { w: "PAYASAM", c: "A sweet milk pudding served at festivals." },
+  { w: "CHUTNEY", c: "A tangy side dish served with idli and dosa." },
+  { w: "RASAM", c: "A thin, peppery South Indian soup eaten with rice." },
+  { w: "PAROTTA", c: "A flaky, layered flatbread from South India." },
+  { w: "JALEBI", c: "A sweet orange spiral that is deep fried and soaked in syrup." },
+  { w: "LADDU", c: "A round Indian sweet made from flour, ghee and sugar." },
+  { w: "PANEER", c: "A fresh Indian cheese used in curries." },
+  { w: "NOODLES", c: "Long thin strands of dough, eaten with sauce or soup." },
+  { w: "PIZZA", c: "An Italian dish with a round base, tomato sauce and cheese." },
+  { w: "JASMINE", c: "A fragrant white flower often worn in the hair." },
+  { w: "LOTUS", c: "A water flower that is India's national flower." },
+  { w: "PEACOCK", c: "India's national bird, famous for its colourful tail feathers." },
+  { w: "DOLPHIN", c: "An intelligent sea mammal that uses clicks to communicate." },
+  { w: "GIRAFFE", c: "The tallest land animal, with a very long neck." },
+  { w: "KANGAROO", c: "An Australian animal that carries its baby in a pouch." },
+  { w: "CHEETAH", c: "The fastest land animal." },
+  { w: "LEOPARD", c: "A big cat with dark rosette spots on its coat." },
+  { w: "BUFFALO", c: "A large horned animal often seen in fields and ponds." },
+  { w: "SPARROW", c: "A small brown bird that was once common in house yards." },
+  { w: "PARROT", c: "A colourful bird that can imitate human speech." },
+  { w: "GALAXY", c: "A huge system of stars, gas and dust; ours is called the Milky Way." },
+  { w: "ECLIPSE", c: "When the moon blocks the sun, or the earth's shadow covers the moon." },
+  { w: "GLACIER", c: "A huge, slow-moving river of ice." },
+  { w: "DESERT", c: "A very dry place that receives little rain." },
+  { w: "ISLAND", c: "A piece of land surrounded by water." },
+  { w: "OCEAN", c: "One of the five huge bodies of salt water on Earth." },
+  { w: "RIVER", c: "A natural stream of water flowing towards the sea." },
+  { w: "WATERFALL", c: "Water falling from a height over a cliff." },
+  { w: "CYCLONE", c: "A powerful rotating storm with strong winds." },
+  { w: "THUNDER", c: "The loud sound that follows a flash in the sky." },
+  { w: "LIGHTNING", c: "A bright flash of electricity in a storm." },
+  { w: "CHENNAI", c: "The capital city of Tamil Nadu." },
+  { w: "MADURAI", c: "A temple city in Tamil Nadu famous for the Meenakshi temple." },
+  { w: "COIMBATORE", c: "A Tamil Nadu city known as the Manchester of South India." },
+  { w: "TRICHY", c: "A Tamil Nadu city famous for its Rockfort temple." },
+  { w: "RAMESWARAM", c: "An island town in Tamil Nadu with a famous Shiva temple and the Pamban bridge." },
+  { w: "FOOTBALL", c: "The most popular sport in the world, played mainly with the feet." },
+  { w: "BADMINTON", c: "A racket sport played with a shuttlecock." },
+  { w: "KABADDI", c: "A contact team sport where a raider must hold his breath while chanting." },
+  { w: "CARROM", c: "A board game where you flick discs into corner pockets." },
+  { w: "CHESS", c: "A strategy board game with kings, queens and pawns." },
+  { w: "OLYMPICS", c: "A global sports event held every four years." },
+  { w: "MARATHON", c: "A long race of about 42 kilometres." },
+  { w: "STADIUM", c: "A large venue where sports matches are held." },
+  { w: "LINUX", c: "An open-source operating system kernel created by Linus Torvalds." },
+  { w: "ANDROID", c: "Google's operating system for mobile phones." },
+  { w: "BROWSER", c: "Software you use to view websites." },
+  { w: "WEBSITE", c: "A collection of web pages under one domain name." },
+  { w: "PASSWORD", c: "A secret string you enter to prove your identity." },
+  { w: "INTERNET", c: "A global network of networks." },
+  { w: "SOFTWARE", c: "The programs that run on a computer, as opposed to its physical parts." },
+  { w: "HARDWARE", c: "The physical parts of a computer that you can touch." },
+  { w: "PROCESSOR", c: "The chip that executes instructions, also called the CPU." },
+  { w: "MEMORY", c: "Where a computer keeps data temporarily while working; RAM is one kind." },
+  { w: "VARIABLE", c: "A named place in a program that stores a value." },
+  { w: "FUNCTION", c: "A reusable block of code that performs a task." },
+  { w: "ARRAY", c: "A collection of items stored one after another and accessed by index." },
+  { w: "STRING", c: "A sequence of characters in programming." },
+  { w: "BOOLEAN", c: "A data type with only two values: true or false." },
+  { w: "INTEGER", c: "A whole number data type with no decimal part." },
+  { w: "POINTER", c: "A variable that stores a memory address." },
+  { w: "DEBUGGING", c: "The process of finding and fixing errors in code." },
+  { w: "SYNTAX", c: "The set of grammar rules of a programming language." },
+  { w: "BINARY", c: "A number system that uses only 0 and 1." },
+  { w: "PIXEL", c: "The smallest dot of colour on a screen." },
+  { w: "CURSOR", c: "The blinking marker that shows where you will type." },
+  { w: "FOLDER", c: "A container used to organise files on a computer." },
+  { w: "TERMINAL", c: "A text window where you type commands to the computer." },
+  { w: "GITHUB", c: "A website where developers host and share code repositories." },
+  { w: "ENCRYPTION", c: "Scrambling data so that only authorised people can read it." },
+  { w: "PHISHING", c: "A scam that tricks you into giving away passwords through fake messages." },
+  { w: "MALWARE", c: "Harmful software such as viruses and trojans." },
+  { w: "HACKER", c: "Someone who breaks into computer systems, or an expert who finds their weaknesses." },
+  { w: "ROBOTICS", c: "The field of building and programming robots." },
+  { w: "DRONE", c: "An unmanned flying machine controlled remotely." },
+  { w: "SENSOR", c: "A device that detects changes such as heat or motion." },
+  { w: "BATTERY", c: "A device that stores chemical energy and supplies power." },
+  { w: "SATELLITE", c: "An object that orbits the earth, used for communication and imaging." },
+  { w: "CIRCUIT", c: "A closed path along which electric current flows." },
+  { w: "TRANSISTOR", c: "A tiny semiconductor switch that is the building block of chips." },
+  { w: "VOLTAGE", c: "The electrical pressure that pushes current through a wire." },
+  { w: "TELESCOPE", c: "An instrument used to view distant stars and planets." },
+  { w: "GRAVITY", c: "The force that pulls objects towards the earth." },
+  { w: "ENERGY", c: "The ability to do work; it can be solar, wind or electrical." },
+  { w: "MAGNET", c: "An object that attracts iron." },
+  { w: "OXYGEN", c: "The gas we breathe in to stay alive." },
+  { w: "CARBON", c: "The element that forms the basis of all living things, symbol C." },
+  { w: "HYDROGEN", c: "The lightest element, symbol H." },
+  { w: "ELECTRON", c: "A negatively charged particle found in atoms." },
+  { w: "MIRROR", c: "A smooth surface that shows your reflection." },
+  { w: "WINDOW", c: "An opening in a wall that lets in light and air." },
+  { w: "PENCIL", c: "A writing tool with graphite inside a wooden body." },
+  { w: "ERASER", c: "A small rubber piece used to remove pencil marks." },
+  { w: "COMPASS", c: "An instrument with a needle that points north." },
+  { w: "BALLOON", c: "A rubber bag filled with air or gas that floats." },
+  { w: "LANTERN", c: "A portable light with a protected flame." },
+  { w: "BRIDGE", c: "A structure built to cross a river or a road." },
+  { w: "TEMPLE", c: "A place of worship." },
+  { w: "MUSEUM", c: "A place where historical or artistic objects are displayed." },
+  { w: "HOSPITAL", c: "A place where sick people are treated." },
+  { w: "AIRPORT", c: "A place where planes take off and land." },
+  { w: "RAILWAY", c: "A track system along which trains run." },
+  { w: "HIGHWAY", c: "A wide road built for fast long-distance traffic." },
+  { w: "JOURNEY", c: "A long trip from one place to another." },
+  { w: "FRIEND", c: "A person you trust and enjoy spending time with." },
+  { w: "FAMILY", c: "A group of parents, children and relatives." },
+  { w: "TEACHER", c: "A person who helps students learn." },
+  { w: "STUDENT", c: "A person who is studying at a school or college." },
+  { w: "DOCTOR", c: "A medical professional who treats patients." },
+  { w: "ENGINEER", c: "A professional who designs and builds machines, structures or software." },
+  { w: "SCIENTIST", c: "A person who studies the natural world through experiments." },
+  { w: "MUSICIAN", c: "A person who plays or composes music." },
+  { w: "PAINTER", c: "An artist who works with brushes and colours." },
+  { w: "FARMER", c: "A person who grows crops and raises animals." },
+  { w: "PILOT", c: "A person who flies an aircraft." },
+  { w: "SOLDIER", c: "A member of an army." },
+  { w: "COMPILER", c: "A program that translates source code into machine code before it runs." },
+  { w: "KERNEL", c: "The core part of an operating system that manages the hardware." },
+  { w: "SERVER", c: "A computer that provides data or services to other computers." },
+  { w: "CLIENT", c: "A device or program that requests services from a server." },
+  { w: "FIREWALL", c: "A security system that filters incoming and outgoing network traffic." },
+  { w: "ROUTER", c: "A device that forwards data packets between networks." },
+  { w: "SWITCH", c: "A device that connects the computers inside a local network." },
+  { w: "GATEWAY", c: "A node that connects two different networks." },
+  { w: "PROTOCOL", c: "A set of rules that lets devices communicate over a network." },
+  { w: "BANDWIDTH", c: "The maximum amount of data that can travel over a connection each second." },
+  { w: "LATENCY", c: "The delay before data starts to transfer after a request." },
+  { w: "PACKET", c: "A small unit of data sent across a network." },
+  { w: "CLOUD", c: "Servers on the internet used to store data and run programs remotely." },
+  { w: "DOCKER", c: "A tool that packages applications into lightweight containers." },
+  { w: "QUERY", c: "A request for data from a database." },
+  { w: "INDEXING", c: "Creating a structure that makes database searches faster." },
+  { w: "RECURSION", c: "A function solving a problem by calling itself with a smaller input." },
+  { w: "STACK", c: "A last-in, first-out data structure." },
+  { w: "QUEUE", c: "A first-in, first-out data structure." },
+  { w: "GRAPH", c: "A data structure made of nodes connected by edges." },
+  { w: "HASHING", c: "Turning data into a fixed-size value using a mathematical function." },
+  { w: "THREAD", c: "The smallest sequence of instructions that an operating system can schedule." },
+  { w: "PROCESS", c: "A program that is currently running." },
+  { w: "SCHEDULER", c: "The part of an operating system that decides which task gets the CPU next." },
+  { w: "DEADLOCK", c: "A situation where tasks wait for each other forever." },
+  { w: "QUANTUM", c: "A kind of computing that uses qubits instead of ordinary bits." },
+  { w: "BLOCKCHAIN", c: "A chain of linked records secured with cryptography." },
+  { w: "FRAMEWORK", c: "A ready-made structure of code that developers build their applications on." },
+  { w: "COMMIT", c: "To save a set of changes to a version control repository." },
+  { w: "BRANCH", c: "A separate line of development in a Git repository." },
+  { w: "DEPLOY", c: "To release an application so that users can access it." },
+  { w: "TOKEN", c: "A small piece of data used to prove who you are after you log in." },
+  { w: "SESSION", c: "A period of activity between a user and a system, such as after logging in." },
+  { w: "COOKIE", c: "A small file that a website stores in your browser." },
+  { w: "BACKUP", c: "A spare copy of data kept in case the original is lost." },
+  { w: "PROXY", c: "A server that sits between you and the internet and forwards your requests." }
+];
+
+const ATTEMPTS_FOR_POPUP = 10;   // popup + clue appear after this many attempts
+const ATTEMPTS_FOR_REVEAL = 15;  // reveal button appears after this many attempts
+const MAX_GUESS_LENGTH = 10;
+
+// ---------- State ----------
+let secret = "";
+let clue = "";
+let guesses = [];      // [{ word, result: [...] }]
+let finished = false;
+let popupShown = false;
+const keyState = {};   // letter -> best status
+
+// ---------- No repeats: words already asked are remembered (also after refresh) ----------
+const STORE_KEY = "word-hunt-asked";
+function loadSeen() {
+  try {
+    const v = JSON.parse(localStorage.getItem(STORE_KEY) || "[]");
+    return Array.isArray(v) ? v : [];
+  } catch (e) { return []; }
+}
+function saveSeen(list) {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(list)); } catch (e) { /* storage blocked: still no repeats until refresh */ }
+}
+let seen = loadSeen();
+let roundRestarted = false;
+
+function pickWord() {
+  seen = seen.filter((w) => WORDS.some((x) => x.w === w));
+  let pool = WORDS.filter((x) => !seen.includes(x.w));
+  roundRestarted = false;
+  if (pool.length === 0) {
+    seen = [];
+    pool = WORDS.slice();
+    roundRestarted = true;
+  }
+  const pick = pool[Math.floor(Math.random() * pool.length)];
+  seen.push(pick.w);
+  saveSeen(seen);
+  return pick;
+}
+
+// ---------- Elements ----------
+const $ = (id) => document.getElementById(id);
+const boardEl = $("board"), msgEl = $("msg"), guessEl = $("guess");
+const lenEl = $("len"), countEl = $("count"), seenEl = $("seen"), patternEl = $("pattern");
+const clueBox = $("clue"), clueText = $("clueText");
+const revealBtn = $("revealBtn"), submitBtn = $("submitBtn");
+const overlay = $("overlay"), mTitle = $("mTitle"), mBody = $("mBody");
+const mAnswer = $("mAnswer"), mActions = $("mActions");
+const keyboardEl = $("keyboard");
+
+// ---------- Game logic ----------
+// Compares the guess with the secret position by position.
+// correct = right letter in the right place
+// present = letter is in the word but in a different place
+// absent  = letter is not in the word (or already used up)
+function scoreGuess(guess, answer) {
+  const n = guess.length;
+  const res = Array(n).fill("absent");
+  const left = {};
+  for (let i = 0; i < answer.length; i++) {
+    if (i < n && guess[i] === answer[i]) continue;
+    left[answer[i]] = (left[answer[i]] || 0) + 1;
+  }
+  for (let i = 0; i < n; i++) {
+    if (i < answer.length && guess[i] === answer[i]) res[i] = "correct";
+  }
+  for (let i = 0; i < n; i++) {
+    if (res[i] !== "correct" && left[guess[i]] > 0) {
+      res[i] = "present";
+      left[guess[i]]--;
+    }
+  }
+  return res;
+}
+
+function newGame() {
+  const pick = pickWord();
+  secret = pick.w;
+  clue = pick.c;
+  guesses = [];
+  finished = false;
+  popupShown = false;
+  for (const k in keyState) delete keyState[k];
+  guessEl.value = "";
+  guessEl.disabled = false;
+  submitBtn.disabled = false;
+  setMsg("");
+  hideOverlay();
+  render();
+  if (roundRestarted) setMsg(`You have seen all ${WORDS.length} words. A new round starts now.`);
+  guessEl.focus();
+}
+
+function submitGuess() {
+  if (finished) return;
+  const g = guessEl.value.trim().toUpperCase();
+  if (g.length === 0) return setMsg("Type a word first.", "error");
+  if (!/^[A-Z]+$/.test(g)) return setMsg("Use English letters only.", "error");
+  if (g.length > MAX_GUESS_LENGTH) return setMsg("Maximum 10 letters.", "error");
+
+  const result = scoreGuess(g, secret);
+  guesses.push({ word: g, result });
+  const rank = { absent: 1, present: 2, correct: 3 };
+  for (let i = 0; i < g.length; i++) {
+    const old = keyState[g[i]];
+    if (!old || rank[result[i]] > rank[old]) keyState[g[i]] = result[i];
+  }
+  guessEl.value = "";
+  setMsg("");
+
+  // Win only when the guess matches the secret exactly
+  if (g === secret) {
+    finished = true;
+    guessEl.disabled = true;
+    submitBtn.disabled = true;
+    render(true);
+    setMsg(`You win! You found the word in ${guesses.length} attempt${guesses.length === 1 ? "" : "s"}! 🎉`, "win");
+    return;
+  }
+
+  render(true);
+
+  if (guesses.length === ATTEMPTS_FOR_POPUP && !popupShown) {
+    popupShown = true;
+    showAskReveal();
+  }
+}
+
+function giveUp() {
+  finished = true;
+  guessEl.disabled = true;
+  submitBtn.disabled = true;
+  render();
+  showAnswer();
+}
+
+// ---------- Rendering ----------
+function render(animateLast) {
+  lenEl.textContent = secret.length;
+  countEl.textContent = guesses.length;
+  seenEl.textContent = `${seen.length} / ${WORDS.length}`;
+
+  // letters found in the correct place so far
+  const pat = [];
+  for (let i = 0; i < secret.length; i++) {
+    const found = guesses.some((g) => g.result[i] === "correct");
+    pat.push(found || finished ? secret[i] : "_");
+  }
+  patternEl.textContent = pat.join(" ");
+
+  // board
+  boardEl.innerHTML = "";
+  guesses.forEach((g, gi) => {
+    const row = document.createElement("div");
+    row.className = "row";
+    for (let i = 0; i < g.word.length; i++) {
+      const t = document.createElement("div");
+      t.className = "tile " + g.result[i];
+      if (animateLast && gi === guesses.length - 1) t.classList.add("pop");
+      t.textContent = g.word[i];
+      row.appendChild(t);
+    }
+    boardEl.appendChild(row);
+  });
+  if (!finished) {
+    const row = document.createElement("div");
+    row.className = "row";
+    row.id = "liveRow";
+    boardEl.appendChild(row);
+    updateLiveRow();
+  }
+  boardEl.scrollTop = boardEl.scrollHeight;
+
+  // clue after 10 attempts
+  if (guesses.length >= ATTEMPTS_FOR_POPUP || finished) {
+    clueBox.hidden = false;
+    clueText.textContent = clue;
+  } else {
+    clueBox.hidden = true;
+  }
+
+  // reveal button after 15 attempts
+  revealBtn.hidden = !(guesses.length >= ATTEMPTS_FOR_REVEAL && !finished);
+
+  renderKeyboard();
+}
+
+function updateLiveRow() {
+  const row = $("liveRow");
+  if (!row) return;
+  const v = guessEl.value.toUpperCase();
+  const count = Math.max(secret.length, v.length);
+  row.innerHTML = "";
+  for (let i = 0; i < count; i++) {
+    const t = document.createElement("div");
+    t.className = "tile" + (v[i] ? " filled" : "");
+    t.textContent = v[i] || "";
+    row.appendChild(t);
+  }
+}
+
+function renderKeyboard() {
+  keyboardEl.innerHTML = "";
+  for (const ch of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
+    const k = document.createElement("div");
+    k.className = "key " + (keyState[ch] || "");
+    k.textContent = ch;
+    keyboardEl.appendChild(k);
+  }
+}
+
+function setMsg(text, type) {
+  msgEl.textContent = text;
+  msgEl.className = "msg" + (type ? " " + type : "");
+}
+
+// ---------- Popups ----------
+function hideOverlay() { overlay.hidden = true; }
+
+function showAskReveal() {
+  mTitle.textContent = "10 attempts used!";
+  mBody.textContent = "Do you want me to reveal the answer, or keep guessing? A clue is now shown below the board.";
+  mAnswer.hidden = true;
+  mActions.innerHTML = "";
+  const yes = document.createElement("button");
+  yes.className = "danger";
+  yes.textContent = "Reveal the answer";
+  yes.onclick = () => { hideOverlay(); giveUp(); };
+  const no = document.createElement("button");
+  no.className = "primary";
+  no.textContent = "Keep guessing";
+  no.onclick = () => { hideOverlay(); guessEl.focus(); };
+  mActions.append(yes, no);
+  overlay.hidden = false;
+  no.focus();
+}
+
+function showAnswer() {
+  mTitle.textContent = "The answer was";
+  mBody.textContent = "Better luck next time! Try a new word.";
+  mAnswer.textContent = secret;
+  mAnswer.hidden = false;
+  mActions.innerHTML = "";
+  const again = document.createElement("button");
+  again.className = "primary";
+  again.textContent = "New Word";
+  again.onclick = newGame;
+  mActions.append(again);
+  overlay.hidden = false;
+  again.focus();
+}
+
+// ---------- Events ----------
+submitBtn.addEventListener("click", submitGuess);
+guessEl.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); submitGuess(); }
+});
+guessEl.addEventListener("input", () => {
+  guessEl.value = guessEl.value.replace(/[^a-zA-Z]/g, "");
+  updateLiveRow();
+});
+revealBtn.addEventListener("click", giveUp);
+$("newBtn").addEventListener("click", newGame);
+
+newGame();
+</script>
+</body>
+</html>
